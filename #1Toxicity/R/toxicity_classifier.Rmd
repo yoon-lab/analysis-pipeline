@@ -1,0 +1,120 @@
+---
+title: "Toxicity Classifier(Random Forest)"
+output:
+  github_document: default
+  html_document:
+    df_print: paged
+---
+### The example data sets
+We use data sets from Ha et al. Sci. Rep. (2018). Datasets contain several properties of oxide nanoparticles, such as physicochemical, toxicological and quantum-mechanical properties.
+
+### Preprocessing of the toxicity Data 
+Before execute read.xlxs, make sure that place the excel file in the current R path.  
+
+
+##### Read Dataset sheet III  as DataFrame object
+```{r}
+library(openxlsx) 
+score_org <- read.xlsx("Datasets.xlsx", sheet = 3, colNames = TRUE) 
+```
+
+##### Convert character values into factor values
+```{r}
+for (i in c(15:19,23)) { 
+  score_org[,i] <- as.factor(score_org[,i])
+} 
+rm(i)
+```
+
+##### Normalize numeric data 
+data.Normalization is function for normalizing numeric data. 'n1' type means standardization.
+```{r, message=F}
+preObj <- score_org[,c(3,5,7,9,11:14,20,21)] 
+preObj$Exposure.time <- gsub('h', '', preObj$Exposure.time)
+preObj$Exposure.time <- as.numeric(preObj$Exposure.time)
+library(clusterSim)
+preObj <- data.Normalization(preObj, type = "n1", normalization = "column")
+```
+
+##### Combine normalized numeric data with factor data 
+```{r}
+score.pre <- data.frame(preObj, score_org[,c(15,17:19,23)])
+str(score.pre)
+```
+
+##### Split data into training and test sets 
+createDataPartition function does startified sampling. We will divide the dataset into 60% training set for training the Random Forest model and 40% test set for testing the trained model. 
+```{r, message=F}
+library(caret)
+inTrain <- createDataPartition(y = score.pre$Toxicity, p = 0.6, list = FALSE) 
+train <- score.pre[inTrain,] 
+test <- score.pre[-inTrain,] 
+```
+
+### Implementation and evaluation 
+Apply the randomForest function on the training set to make a random forest model that can predict toxicity. 
+```{r, message=F}
+library(randomForest)
+mod <- randomForest(Toxicity ~ ., data = train, importance = T, proximity = T)
+```
+
+Apply the randomForest function on the test set to evaluate toxicity prediction performance of the trained model.  
+```{r}
+
+pred <- predict(mod, test) 
+pred.prob <-predict(mod, test, type="prob") 
+```
+
+##### Make a confusion matrix 
+```{r}
+table(test$Toxicity, pred) 
+```
+
+##### Caculate accuracy and F1 Score
+The F1 score is the harmonic mean of the precision and recall. In statistical analysis of binary classification, F1 score is a measure of a test's accuracy.
+```{r}
+(accuracy <- sum(pred==test$Toxicity) / nrow(test) * 100) 
+precision <- sum(pred == "Nontoxic" & test$Toxicity == "Nontoxic") / sum(pred == "Nontoxic")
+sensitivity <- sum(pred == "Nontoxic" & test$Toxicity == "Nontoxic") / sum(test$Toxicity=="Nontoxic")
+(F1 <- 2*(precision*sensitivity)/(precision + sensitivity))
+```
+
+
+###### Build ROC plot & calculate AUC 
+AUC - ROC curve is a performance measurement for classification problem at various thresholds settings. ROC is a probability curve and AUC represents degree or measure of separability. It tells how much model is capable of distinguishing between classes. Higher the AUC, better the model is at predicting 0s as 0s and 1s as 1s. Higher the AUC, better the model is at distinguishing between nanoparticle with toxicity and non-toxicity.  
+The ROC curve is plotted with TPR against the FPR where TPR is on y-axis and FPR is on the x-axis.
+```{r, message=F}
+library(PresenceAbsence)
+score_org$prob <- ifelse(score_org$Toxicity == "Nontoxic",0,1) 
+ObsPred <- data.frame(Material=score_org[-inTrain,]$Material.type, 
+                      Probability=score_org[-inTrain,]$prob, 
+                      Prediction=pred.prob[,2]) 
+
+auc.roc.plot(ObsPred, which.model = 1, model.names = "All.attributes", 
+             color = FALSE, line.type = "solid", threshold = 101, 
+             xlab = "1 - Specificity (false positives)", 
+             ylab = "Sensitivity (true positive)", main = "(f)", 
+             find.auc = TRUE, opt.thresholds = FALSE, opt.methods = 9)
+```
+
+##### Plot error rate as the number of tree increase
+```{r}
+plot(mod) 
+legend("top", colnames(mod$err.rate), col = 1:3, cex = 0.8, fill = 1:3) 
+```
+
+###### value important 
+```{r}
+importance(mod) 
+varImpPlot(mod) 
+```
+
+##### margin graph
+The margin of a data point is defined as the proportion of votes for the correct class minus maximum proportion of votes for the other classes. Thus under majority votes, positive margin means correct classification, and vice versa.
+```{r, warning=F}
+plot(margin(mod, train$Toxicity), xlab= "sample index", ylab="margin") 
+legend("bottomright", levels(as.factor(attributes(margin(mod, train_4$Toxicity))$names)), col = c("red", "steelblue"), cex=0.8, pch=16)
+```
+
+### References
+- My Kieu Ha (2018). Toxicity Classification of Oxide Nanomaterials: Effects of Data Gap Filling and PChem Score-based Screening Approaches. Sci Rep 8, 3141. doi:10.1038/s41598-018-21431-9

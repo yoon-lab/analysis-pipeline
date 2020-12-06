@@ -1,0 +1,142 @@
+---
+title: "CyTOF Data Analysis"
+output:
+  github_document: default
+  html_document:
+    df_print: paged
+---
+### The example data sets
+We use a of CyTOF data from Environmental Science:Nano Paper, My et al.2020. There are 7 samples of PBMC from human. Treated samples are coated with Ag nano pariticle in various method.We use a leukocyte sample which are manually gated and concatenated in FlowJo Software.  
+The original data is available from the link below.  
+https://drive.google.com/drive/u/0/folders/1hD8bfT8z-9y8lGRDH0sTb_Jn12xw0S4X
+
+
+### Data preprocessing 
+
+##### Read fcs file
+The FCS format is a binary data file standard originally developed for storage of flow cytometry data. As well as the ion count matrix, it has slots for experiment information, channel information, etc. 
+It is recommended that you set the current path using setwd() in console and put the file in that directory.
+```{r, warning=F}
+library(flowCore)
+fcs <- read.FCS(filename="Leukocytes.fcs", transformation=F, truncate_max_range = F)
+
+```
+
+##### Extract expression matrix
+```{r}
+exprs <- fcs@exprs
+head(exprs)
+```
+
+##### Explore the parameters
+fcs file also contains metadata, such as the expression range of each channel.
+```{r}
+fcs@parameters@data
+```
+
+Make name of columns human readable using information in the parameter data slot
+```{r}
+markers <- gsub(pattern = "_$", replacement = "", x = as.vector(fcs@parameters@data$desc))
+markers <- gsub(pattern = ".*_", replacement = "", x = markers)
+markers <- gsub(pattern = "-", replacement = ".", x = markers)
+colnames(exprs) <- markers
+surface_markers <- c("CD3", "CD4", "CD8a", "CD11a", "CD16", "CD44", "CD45RA", "CD45RO", "HLA.DR", "CCR7")
+```
+
+##### Data transformation
+Mass cytometry data is usuallly ArcSinh transformed. This transformation will retain linearity in the low end of the count spectrum, but it resembles a log transformation in the high end.  Transformations are done primarily for visualization purposes
+```{r}
+cofactor <- 5
+exprs[, surface_markers] <- asinh(exprs[, surface_markers] / cofactor)
+```
+
+### Dimensionality Reduction
+
+##### PCA
+For mass cytometry data, a PCA will often capture 40-50% of the variance on the first 2-3 PCs, but since the distance between events is linear, data existing on a nonlinear manifold will be misrepresented (Chester & Maecker  et al., 2015). 
+```{r}
+pca <- prcomp(exprs[, surface_markers], scale. = TRUE)
+library(ggplot2)
+ggplot(as.data.frame(pca$x), aes(x = PC1, y = PC2)) + 
+  geom_point(color = "grey", alpha = 0.6, size = 0.5) + 
+  theme_bw() 
+```
+
+##### t-SNE
+The t-Distributed Stochastic Neighbor Embedding (t-SNE) dimensionality reduction algorithm is a popular tool for dimensionality reduction of cytometry data (van der Maaten and Hinton et al., 2008).  
+Before running t-SNE, it is necessary to remove identical events (if any) from the sample (duplicate rows).We set a seed for get reproducible results.
+```{r}
+library(Rtsne)
+table(duplicated(exprs[, surface_markers]))
+exprs <- exprs[!duplicated(exprs[, surface_markers]), ]
+set.seed(42)
+tsne <- Rtsne(exprs[, surface_markers])
+ggplot(as.data.frame(tsne$Y), aes(x = V1, y = V2)) +
+  geom_point(color = "grey", alpha = 0.6, size = 0.5) +
+  xlab('tSNE1') + ylab('tSNE2') +
+  theme_bw()
+```
+
+##### UMAP
+UMAP works in a dimensionality reduction method that is more similar to t-SNE than PCA. However, it has several advantages over t-SNE. The first one is speed. For a small dataset there may not be a significant difference, bu you will surely notice it for a million cells. Furthermore, UMAP preserves global distances in the data a lot better than t-SNE.  We set a seed for get reproducible results.
+```{r, message=F}
+library(uwot)
+umap <- umap(exprs[, surface_markers], min_dist = 0.2)
+ggplot(as.data.frame(umap), aes(x = V1, y = V2)) +
+  geom_point(color = "grey", alpha = 0.6, size = 0.5) +
+  xlab('UMAP1') + ylab('UMAP2') +
+  theme_bw()
+```
+
+##### Visualize tSNE plot with several marker intensities
+```{r, message=F}
+library(reshape2) 
+library(cowplot) 
+obj <- cbind.data.frame(exprs, tsne$Y) 
+colnames(obj)[(ncol(obj)-1):ncol(obj)] <- c('tSNE1', 'tSNE2') 
+colnames(obj) <- make.unique(names(obj))
+p <- list() 
+for (c in c("CD4", "CD8a", "CD45RA", "CCR7")) { 
+  p[[c]] <- ggplot(obj, aes(x = tSNE1, y = tSNE2)) + 
+    geom_point(aes_string(color = c), size = 0.5) + 
+    theme_bw() 
+} 
+plot_grid(plotlist = p, ncol = 2) 
+```
+
+### Clustering 
+##### Phenograph
+Phenograph is an algorithm which directly assigns single cells to a particular cluster while taking the all measured dimensions into account. Phenograph employs a k-nearest neighbor graph (k-NNG), in which each cell is a node that is connected to its nearest neighbors by edges, to cluster cells into phenotypically similar groups - cellular populations. Phenograph also requires removal of duplicates.   
+Phenograph is implemented in the R package “cytofkit”.
+```{r,warning=F, message=F}
+library(cytofkit) 
+clusters_pg <- cytof_cluster(xdata = exprs[,surface_markers], method = "Rphenograph") 
+```
+
+It is a vector that contains the number of clusters of entire cell.  
+```{r}
+head(clusters_pg)
+```
+
+
+##### Visualize phenograph results on tSNE
+```{r}
+library(RColorBrewer)
+getPalette = colorRampPalette(brewer.pal(9, "Set1")) 
+cols <- getPalette(max(clusters_pg)) 
+plot_df <- cbind.data.frame(obj, clusters_pg) 
+plot_df$clusters_pg <-as.factor(plot_df$clusters_pg) 
+ggplot(plot_df, aes(x = tSNE1, y = tSNE2)) + 
+  geom_point(aes(color = clusters_pg), alpha = 0.6, size = 0.5) + 
+  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 2), 
+                               ncol = 2, title = 'Cluster')) + 
+  scale_color_manual(values = cols) + 
+  theme_bw() 
+
+```
+
+### References
+- My Kieu Ha (2020). Mass cytometric study on the heterogeneity in cellular association and cytotoxicity of silver nanoparticles in primary human immune cells. Environmental Science:Nano, 2020,7, 1102-1114. doi:10.1039/C9EN01104H
+- Data scientist’s primer to analysis of mass cytometry data, The Cancer Omics Group, https://biosurf.org/cytof_data_scientist.html#1_preamble
+
+

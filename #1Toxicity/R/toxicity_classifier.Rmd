@@ -15,7 +15,7 @@ Before execute read.xlxs, make sure that place the excel file in the current R p
 ##### Read Dataset sheet III  as DataFrame object
 ```{r}
 library(openxlsx) 
-score_org <- read.xlsx("Datasets.xlsx", sheet = 3, colNames = TRUE) 
+score_org <- read.xlsx("../data/Datasets.xlsx", sheet = 3, colNames = TRUE) 
 ```
 
 ##### Convert character values into factor values

@@ -18,7 +18,7 @@ The FCS format is a binary data file standard originally developed for storage o
 It is recommended that you set the current path using setwd() in console and put the file in that directory.
 ```{r, warning=F}
 library(flowCore)
-fcs <- read.FCS(filename="Leukocytes.fcs", transformation=F, truncate_max_range = F)
+fcs <- read.FCS(filename="../data/Leukocytes.fcs", transformation=F, truncate_max_range = F)
 
 ```
 

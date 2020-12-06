@@ -12,7 +12,7 @@ This document introduces 10x Genomics' scRNA-seq technology and pipeline for pre
 
 ### Setup the Seurat Object
 ##### Load 10X Data
-```{r}
+```{r, message=F, warning=F}
 library(Seurat)
 library(dplyr)
 library(Matrix)
@@ -24,7 +24,7 @@ dim(pbmc.data)
 
 
 ##### Initialize the Seurat object with the raw (non-normalized data).
-```{r}
+```{r, warning=F}
 pbmc <- CreateSeuratObject(counts = pbmc.data, project = "pbmc3k", min.cells = 3, min.features = 200)
 dim(pbmc)
 ```
@@ -64,7 +64,7 @@ pbmc <- NormalizeData(pbmc, normalization.method = "LogNormalize", scale.factor 
 
 ##### Identification of highly variable features (feature selection)
 We next calculate a subset of features that exhibit high cell-to-cell variation in the dataset.
-```{r}
+```{r, message=F, warning=F}
 pbmc <- FindVariableFeatures(pbmc, selection.method = "vst", nfeatures = 2000)
 
 # Identify the 10 most highly variable genes
@@ -82,13 +82,13 @@ Next, we apply a linear transformation ('scaling') that is a standard pre-proces
 - Scales the expression of each gene, so that the variance across cells is 1
     - This step gives equal weight in downstream analyses, so that highly-expressed genes do not dominate
 - The results of this are stored in pbmc[["RNA"]]@scale.data
-```{r}
+```{r, message=F, warning=F}
 all.genes <- rownames(pbmc)
 pbmc <- ScaleData(pbmc, features = all.genes)
 ```
 ### Perform linear dimensional reduction(PCA)
 we perform PCA on the scaled data. By default, only the previously determined variable features are used as input, but can be defined using features argument if you wish to choose a different subset.
-```{r}
+```{r, message=F, warning=F}
 pbmc <- RunPCA(pbmc, features = VariableFeatures(object = pbmc))
 VizDimLoadings(pbmc, dims = 1:2, reduction = "pca")
 ```
@@ -99,34 +99,34 @@ DimPlot(pbmc, reduction = "pca")
 ### Cluster the cells
 Seurat v3 applies a graph-based clustering approach, building upon initial strategies in (Macosko et al).
 As in PhenoGraph, we first construct a KNN graph based on the euclidean distance in PCA space, and refine the edge weights between any two cells based on the shared overlap in their local neighborhoods (Jaccard similarity). This step is performed using the FindNeighbors function, and takes as input the previously defined dimensionality of the dataset (first 10 PCs).To cluster the cells, we next apply modularity optimization techniques such as the Louvain algorithm (default) or SLM [SLM, Blondel et al., Journal of Statistical Mechanics], to iteratively group cells together, with the goal of optimizing the standard modularity function. The FindClusters function implements this procedure, and contains a resolution parameter that sets the 'granularity' of the downstream clustering, with increased values leading to a greater number of clusters. The clusters can be found using the Idents function.
-```{r}
+```{r, message=F, warning=F}
 pbmc <- FindNeighbors(pbmc, dims = 1:10)
 pbmc <- FindClusters(pbmc, resolution = 0.5)
 head(Idents(pbmc), 5)
 ```
 ### Run non-linear dimensional reduction (UMAP/tSNE)
 Seurat offers several non-linear dimensional reduction techniques, such as tSNE and UMAP, to visualize and explore these datasets. The goal of these algorithms is to learn the underlying manifold of the data in order to place similar cells together in low-dimensional space.
-```{r}
+```{r, message=F, warning=F}
 pbmc <- RunUMAP(pbmc, dims = 1:10)
 DimPlot(pbmc, reduction = "umap")
 ```
 ### Finding differentially expressed features
 Seurat can help you find markers that define clusters via differential expression. By default, it identifes positive and negative markers of a single cluster (specified in ident.1), compared to all other cells. FindAllMarkers automates this process for all clusters, but you can also test groups of clusters vs. each other, or against all cells. The min.pct argument requires a feature to be detected at a minimum percentage in either of the two groups of cells.
-```{r}
+```{r, message=F, warning=F}
 # find all markers of cluster 1
 cluster1.markers<-FindMarkers(pbmc, ident.1=1, min.pct=0.25)
 head(cluster1.markers, n=5)
 ```
 
 
-```{r}
+```{r, message=F, warning=F}
 # find all markers distinguishing cluster 5 from clusters 0 and 3
 cluster5.markers <- FindMarkers(pbmc, ident.1 = 5, ident.2 = c(0, 3), min.pct = 0.25)
 head(cluster5.markers, n = 5)
 ```
 
 
-```{r}
+```{r, message=F, warning=F}
 # find markers for every cluster compared to all remaining cells, report only the positive ones
 pbmc.markers <- FindAllMarkers(pbmc, only.pos=T, min.pct = 0.25, logfc.threshold = 0.25)
 pbmc.markers %>% group_by(cluster) %>% top_n(n=2, wt = avg_log2FC)
@@ -143,7 +143,8 @@ FeaturePlot(pbmc, features = c("CD14", "LYZ", "FCGR3A", "MS4A7", "MS4A1"))
 
 ### Assigning cell type identity to clusters
 
-In the case of this dataset, we can use canonical markers to easily match the unbiased clustering to known cell types(B cells : MS4A1, Monocytes: CD14, LYZ, FCGR3A, MS4A7)
+In the case of this dataset, we can use canonical markers to easily match the unbiased clustering to known cell types  
+(B cells : MS4A1, Monocytes: CD14, LYZ, FCGR3A, MS4A7)
 ```{r}
 new.cluster.ids <- c("unassigned", "unassigned", "unassigned", "unassigned", "unassigned", "B cells", "Monocytes", "unassigned", "unassigned")
 names(new.cluster.ids) <- levels(pbmc)

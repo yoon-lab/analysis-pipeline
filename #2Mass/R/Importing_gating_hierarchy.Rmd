@@ -1,0 +1,126 @@
+---
+title: "Importing gating hierarchy"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+
+---
+### Import Gating population from cytobank with GatingML 
+
+##### With gatingML file and related fcs files, you can get the gatingset object with CytoML
+```{r, message=F, warning=F}
+library(flowWorkspace)
+library(CytoML)
+library(flowCore)
+
+#full path of gatingML and fcsfile 
+xmlfile <- "../data/CytExp_337288_Gates_v6.xml"
+fcsfile <- "../data/2019 1 29  Control_Leukocyte.fcs"
+#Get gatingset object from gatingML file and fcs file.
+gs <- cytobank_to_gatingset(xmlfile, fcsfile)
+#Get gated flow data from gatingset
+fs <-  gs_pop_get_data(gs)
+```
+
+##### Also, you can get the populations of gated cell type and gating hierarchy
+```{r, message=F, warning=F}
+# Extract the population statistics
+gs_pop_get_count_fast(gs, statType = "count")
+```
+
+```{r, message=F, warning=F}
+plot(gs)
+```
+
+```{r,echo=FALSE}
+rm(list=ls())
+```
+
+
+### Import from Flowjo Workspace
+##### With Flowjo workspace file and related fcs files, you can get the gatingset object with CytoML. Both files must be in the same directory. 
+
+```{r, message=F, warning=F}
+#Import Flowjo workssace(같은 위치에 .fcs파일이 있어야 합니다.)
+ws <- open_flowjo_xml("../data/concat_leukocytes.wsp")
+gs <- flowjo_to_gatingset(ws, name=1)
+```
+
+##### When importing gating information, CytoML transforms several channels in flow data which are used in gating as they are written in gating information file. To treat all channels equally, we have to transform flow data inversely and make it raw data. 
+
+```{r, message=F, warning=F}
+# Inverse transformation
+trans.inv <- gh_get_transformations(gs[[1]], inverse = TRUE) 
+translist <- transformList(names(trans.inv), trans.inv)
+fs.raw <- transform(fs, translist)
+# Extract expression matrix from flow data 
+exprs <- exprs(fs.raw[[1]])
+exprs <- as.data.frame(exprs)
+```
+
+
+##### Change marker name easy to read 
+```{r}
+(params <- parameters(fs.raw[[1]])@data)
+```
+##### Depending on the fcs file, the name of the channel can vary. It would be good process to change channel names by referring to description of parameter and make it easy to read.
+
+```{r}
+#Convert Marker names by referring to description of parameter  
+for(i in colnames(exprs)){
+  
+  if(i %in% params[,1]){
+    colnames(exprs)[colnames(exprs)==i] <- params[params$name==i,2]
+  }
+}
+#Remove channles without description 
+exprs <- exprs[,!is.na(colnames(exprs))] 
+#Leave the name of target antibody only
+colnames(exprs) <- gsub(pattern = "^[0-9]*", replacement ="",x=colnames(exprs))
+colnames(exprs) <- gsub(pattern = "-", replacement =".",x=colnames(exprs))
+colnames(exprs) <- gsub(pattern = "_$", replacement ="",x=colnames(exprs))
+colnames(exprs) <- gsub(pattern = ".*_", replacement ="",x=colnames(exprs))
+colnames(exprs) <- make.unique(colnames(exprs),sep = "_")
+```
+
+```{r}
+plot(gs)
+```
+
+
+```{r}
+#Annotate Sample names
+exprs["sample"] <- rep("NA",nrow(exprs))
+path <- gs_get_pop_paths(gs)
+for(i in 1:length(path)){
+  split_path <- strsplit(path[i],"/")
+  if(length(split_path[[1]])==2){
+    exprs[gh_pop_get_indices(gs,path[i]),"sample"] <- split_path[[1]][2]
+  }
+}
+```
+
+```{r}
+#Annotate cell types
+exprs["celltype"] <- rep("ungated",nrow(exprs))
+exprs["node"] <- rep("ungated",nrow(exprs))
+for(i in gs_get_leaf_nodes(gs)){
+  #i <- gsub(".*/", "", i)
+  cellType <- gsub(".*/", "", i)
+  exprs[gh_pop_get_indices(gs,i),"celltype"] <- cellType
+  exprs[gh_pop_get_indices(gs,i),"node"] <- i
+}
+(table(exprs[,"celltype"]))
+```
+
+```{r}
+exprs[,c("celltype","node","sample")] <- lapply(exprs[,c("celltype","node","sample")], as.factor)
+```
+
+
+
+
+
+
+

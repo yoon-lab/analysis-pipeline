@@ -543,3 +543,5 @@ table(exprs[,"celltype_nto1"])
     ##                 6152                 5964                 4348 
     ##              NK cell              ungated 
     ##                19186                38979
+
+If you want to use this method easily, refer to [cluster_assign.R](https://github.com/yoon-lab/analysis-pipeline/blob/main/%232Mass/R/cluster_assign.R)

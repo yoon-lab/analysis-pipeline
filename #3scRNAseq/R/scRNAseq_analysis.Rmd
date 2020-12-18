@@ -1,6 +1,9 @@
 ---
 title: "scRNAseq analysis"
-output: github_document
+output:
+  github_document: default
+  html_document:
+    df_print: paged
 ---
 ### The example data sets
 We use a of single-cell RNA sequencing data from Ha et al. Small(2020). Treated samples are coated with Ag nano pariticle.We use a preprocessed sample in CellRanger Software. 

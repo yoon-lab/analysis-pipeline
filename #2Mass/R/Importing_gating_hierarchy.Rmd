@@ -1,14 +1,16 @@
 ---
-title: "Importing gating hierarchy"
+title: "Importing gating informations and assigning cell type to clusters"
 output:
-  prettydoc::html_pretty:
-    theme: cayman
-    highlight: github
-
+  github_document: default
+  html_document:
+    df_print: paged
 ---
-### Import Gating population from cytobank with GatingML 
+# Import gating information
 
-##### With gatingML file and related fcs files, you can get the gatingset object with CytoML
+
+
+### Import gating information from cytobank
+With gatingML file and related fcs files, you can get the gatingset object with CytoML
 ```{r, message=F, warning=F}
 library(flowWorkspace)
 library(CytoML)
@@ -23,7 +25,7 @@ gs <- cytobank_to_gatingset(xmlfile, fcsfile)
 fs <-  gs_pop_get_data(gs)
 ```
 
-##### Also, you can get the populations of gated cell type and gating hierarchy
+Also, you can get the populations of gated cell type and gating hierarchy
 ```{r, message=F, warning=F}
 # Extract the population statistics
 gs_pop_get_count_fast(gs, statType = "count")
@@ -38,16 +40,17 @@ rm(list=ls())
 ```
 
 
-### Import from Flowjo Workspace
-##### With Flowjo workspace file and related fcs files, you can get the gatingset object with CytoML. Both files must be in the same directory. 
-
+### Import Gating information from cytobank
+With Flowjo workspace file and related fcs files, you can get the gatingset object with CytoML. Both files must be in the same directory. 
 ```{r, message=F, warning=F}
-#Import Flowjo workssace(같은 위치에 .fcs파일이 있어야 합니다.)
+#Import Flowjo workssace
 ws <- open_flowjo_xml("../data/concat_leukocytes.wsp")
 gs <- flowjo_to_gatingset(ws, name=1)
+#Get gated flow data from gatingset
+fs <- gs_pop_get_data(gs)
 ```
 
-##### When importing gating information, CytoML transforms several channels in flow data which are used in gating as they are written in gating information file. To treat all channels equally, we have to transform flow data inversely and make it raw data. 
+When importing gating information, CytoML transforms several channels in flow data which are used in gating as they are written in gating information file. To treat all channels equally, we have to transform flow data inversely and make it raw data. 
 
 ```{r, message=F, warning=F}
 # Inverse transformation
@@ -61,12 +64,13 @@ exprs <- as.data.frame(exprs)
 
 
 ##### Change marker name easy to read 
-```{r}
+```{r, message=F, warning=F}
 (params <- parameters(fs.raw[[1]])@data)
 ```
-##### Depending on the fcs file, the name of the channel can vary. It would be good process to change channel names by referring to description of parameter and make it easy to read.
 
-```{r}
+Depending on the fcs file, the name of the channel can vary. It would be good process to change channel names by referring to description of parameter and make it easy to read.
+
+```{r, message=F, warning=F}
 #Convert Marker names by referring to description of parameter  
 for(i in colnames(exprs)){
   
@@ -84,12 +88,18 @@ colnames(exprs) <- gsub(pattern = ".*_", replacement ="",x=colnames(exprs))
 colnames(exprs) <- make.unique(colnames(exprs),sep = "_")
 ```
 
+##### Annotating sample condtion and manually gated cell type 
+In this sample, sample condition nodes have depth 1 and cell type nodes are leaf node at the tree of gating hierarchy.  
+
+
+To annotate these conditions, we use ‘gh_pop_get_indices’ function that returns a logical vector that describes each event in a sample is included by certain gate.  
 ```{r}
-plot(gs)
+#Plot gating hierarchy
+plot(gs,fontsize=30)
 ```
 
-
-```{r}
+We can annotate sample condition by selecting nodes which have depth 1 and using ‘gh_pop_get_indices’ function.
+```{r, message=F, warning=F}
 #Annotate Sample names
 exprs["sample"] <- rep("NA",nrow(exprs))
 path <- gs_get_pop_paths(gs)
@@ -101,7 +111,8 @@ for(i in 1:length(path)){
 }
 ```
 
-```{r}
+We can annotate cell type by selecting leaf nodes without child node and using ‘gh_pop_get_indices’ function. The cells that are not included in leaf nodes are annotated as ‘ungated’
+```{r, message=F, warning=F}
 #Annotate cell types
 exprs["celltype"] <- rep("ungated",nrow(exprs))
 exprs["node"] <- rep("ungated",nrow(exprs))
@@ -111,16 +122,123 @@ for(i in gs_get_leaf_nodes(gs)){
   exprs[gh_pop_get_indices(gs,i),"celltype"] <- cellType
   exprs[gh_pop_get_indices(gs,i),"node"] <- i
 }
-(table(exprs[,"celltype"]))
+
 ```
 
-```{r}
+```{r, message=F, warning=F}
+table(exprs[,"sample"],exprs[,"celltype"])
+```
+To treat easily, conver these character values to factor values
+
+```{r, message=F, warning=F}
 exprs[,c("celltype","node","sample")] <- lapply(exprs[,c("celltype","node","sample")], as.factor)
+str(exprs)
+```
+
+##### Benefits of CytoML
+
+- identifying gating information cell by cell in R
+  - For example, It can be used for learning of the automatic gating and calculation of gating populations.
+
+- Free transition of working environment between different platforms. 
+
+
+
+
+# Assign cluster to celltype by calculating F1 score matrix
+
+Select the markers used for finding population in manual gating as markers for clustering.
+```{r, message=F, warning=F}
+interest_markers <- c("NK1.1", "Gr.1", "CD11c", "Mac.1", "CD3e", "TCRb", "CD19", "B220")
+interest_markers %in% colnames(exprs)
+```
+
+Cluster the cells with Phenograph method. 
+```{r, message=F, warning=F}
+library(cytofkit)
+clusters_pg <- cytof_cluster(xdata = exprs[,interest_markers], method = "Rphenograph") 
+```
+### Measure F1 Score matrix
+Using manually gated cell type as actual value and cluster number as predicted value, calculate precsion, recall, F1 score.Then we can make a F1 Score matrix 
+```{r, message=F, warning=F}
+
+tbl_celltype <- table(exprs[,"celltype"])
+tbl_cluster <- table(clusters_pg)
+F1_mat <- matrix(NA, nrow=length(tbl_cluster),ncol=length(tbl_celltype))
+
+for (i in 1:length(tbl_cluster)){
+  for (j in 1:length(tbl_celltype)){
+    
+    true_positives <- sum(clusters_pg == i &
+                          exprs[,"celltype"] == levels(exprs[,"celltype"])[j])
+    detected <- sum(clusters_pg == i)
+    truth <- sum(exprs[,"celltype"] == levels(exprs[,"celltype"])[j])
+    
+    #calculate precision, recall and F1 Score
+    precision_ij <- true_positives / detected
+    recall_ij <- true_positives / truth
+    F1_ij <- 2 * (precision_ij * recall_ij) / (precision_ij + recall_ij)
+    
+    if (F1_ij == "NaN") F1_ij <- 0
+    
+    F1_mat[i, j] <- F1_ij
+  }
+}
+rownames(F1_mat) <- names(tbl_cluster)
+colnames(F1_mat) <- names(tbl_celltype)
+F1_mat
+```
+### Assignment method 1: 1-1 mapping by Hungarian algorithm
+##### Hungarian algorithm
+The Hungarian matching algorithm, also called the Kuhn-Munkres algorithm, is a O(n^3) algorithm that can be used to find maximum-weight matchings in bipartite graphs, which is sometimes called the assignment problem. Hungarian algorithm is implemented by using solve_LSAP function. Using this algorithm, we can match the optimal cluster to cell type matching that sum of the F1 score maximize.
+```{r, message=F, warning=F}
+# use transpose matrix (Hungarian algorithm assumes n_rows <= n_cols)
+F1_mat_trans <- t(F1_mat)
+if (nrow(F1_mat_trans) <= ncol(F1_mat_trans)) {
+  # if fewer (or equal no.) true populations than detected clusters, can match all true populations
+  labels_matched <- clue::solve_LSAP(F1_mat_trans, maximum = TRUE)
+  # use row and column names since some labels may have been removed due to unassigned cells
+  labels_matched <- as.numeric(colnames(F1_mat_trans)[as.numeric(labels_matched)])
+  names(labels_matched) <- rownames(F1_mat_trans)
+  
+} else {
+  # if fewer detected clusters than true populations, use transpose matrix and assign
+  # NAs for true populations without any matching clusters
+  labels_matched_flipped <- clue::solve_LSAP(F1_mat, maximum = TRUE)
+  # use row and column names since some labels may have been removed due to unassigned cells
+  labels_matched_flipped <- as.numeric(rownames(F1_mat_trans)[as.numeric(labels_matched_flipped)])
+  names(labels_matched_flipped) <- rownames(F1_mat)
+  labels_matched <- rep(NA, ncol(F1_mat))
+  names(labels_matched) <- rownames(F1_mat_trans)
+  labels_matched[as.character(labels_matched_flipped)] <- as.numeric(names(labels_matched_flipped))
+}
+labels_matched
+```
+
+Since it is 1-to-1 matching, there are many cluster that are not assigned.
+```{r, message=F, warning=F}
+pop <- rep(NA, nrow(exprs))
+for (i in 1:length(pop)){
+pop[i] <- ifelse(clusters_pg[i] %in% labels_matched, names(which(labels_matched==clusters_pg[i])), "unassigned")
+}
+exprs[,"celltype_1to1"] <- pop
+table(exprs[,"celltype_1to1"])
 ```
 
 
+### Assignment method 2: n-1 mapping by finding maximum F1 Score
+Also using F1 score matrix, you can easily assign cell type to cluster by matching cell type with the largest F1 score for each cluster.   
+```{r, message=F, warning=F}
+labels_matched <- rep(NA, nrow(F1_mat))
+for(i in 1:nrow(F1_mat)){
+  labels_matched[i] <- names(which.max(F1_mat[i,]))
+}
+```
 
 
-
+```{r, message=F, warning=F}
+exprs[,"celltype_nto1"] <- labels_matched[clusters_pg]
+table(exprs[,"celltype_nto1"])
+```
 
 

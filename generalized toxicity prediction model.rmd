@@ -1,0 +1,41 @@
+setwd("D:/study_materials/coding materials/Dr Choi data")
+library(caret)
+library(openxlsx)
+cjsdata<-read.xlsx("Cjs.xlsx",sheet=2)
+
+#Convert character values into factor 
+word<- c("assay","cell_line","cell_species","cell_origin","cell_type")
+for (i in word)
+{cjsdata[,i] <- as.factor(cjsdata[,i])}
+
+preObj <- cjsdata[,c(1:9,14,15)] 
+preObj <- data.Normalization(preObj, type = "n1", normalization = "column")
+
+cjs.pre <- data.frame(preObj, cjsdata[,c(9:13)]) 
+
+
+#Split Data
+inTrain <- createDataPartition(y = cjsdata$toxicity, p = 0.6, list = FALSE) 
+train <- cjsdata[inTrain,] 
+test <- cjsdata[-inTrain,] 
+
+#Random Forest
+mod_rf <- train(toxicity~., data=train, method='rf', metric='Accuracy')
+pred_rf <- predict(mod_rf, test) 
+confusionMatrix(pred_rf,as.factor(test$toxicity))
+
+#Generalized Linear Model
+mod_fit <- train(toxicity ~.,  data=train, method="glm", family="binomial")
+pred_glm <- predict(mod_fit, newdata=test)
+confusionMatrix(pred_glm,as.factor(test$toxicity))
+
+#Support Vector Machine
+mod_svm <- train(toxicity ~., data =train, method = "svmLinear",preProcess = c("center", "scale"),
+                    tuneLength = 10)
+pred_svm <- predict(mod_svm, newdata = test)
+confusionMatrix(pred_svm,as.factor(test$toxicity))
+
+#Neural Network
+mod_nnet <- train(toxicity ~., data = train, method = "nnet")
+pred_nnet <- predict(mod_nnet, newdata = test)
+confusionMatrix(pred_nnet,as.factor(test$toxicity))

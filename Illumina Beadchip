@@ -1,0 +1,46 @@
+# This is an example of analyzing GSE20692
+library(lumi)
+
+# Read data
+illu_raw<-read.table("GSE20692_mRNA_non-normalized.txt",header = TRUE,sep="\t")
+illu_ag<- as.matrix(illu_raw[,c(2,4,6,8,10,12)])
+
+# Quality Check
+boxplot(data.frame(illu_ag),col="blue")
+
+# Normalization
+illu_ag_norm<-lumiN(illu_ag, method = c("quantile"), verbose = TRUE)
+
+# Probe filtering
+for (i in 1:24526)  {
+  if ((illu_raw[i,3]>0.01)|(illu_raw[i,5]>0.01)|(illu_raw[i,7]>0.01)|(illu_raw[i,9]>0.01)|(illu_raw[i,11]>0.01)|(illu_raw[i,13]>0.01)) {
+    illu_raw[i,3]<-"delete"
+  }
+}
+to_be_delete<- which(illu_raw[,3]=="delete")
+row.names(illu_ag_norm)<-illu_raw[,1]
+illu_ag_norm<-illu_ag_norm[-to_be_delete,]
+illu_ag_norm = log(illu_ag_norm, 2)
+
+# Batch Effect (Here we consider control as one batch and treatment as one batch)  
+library(sva)
+batch <- c(rep(1, 3), rep(2, 3))
+group <- rep(c(0,1), 3)
+adjusted_counts <- ComBat_seq(illu_ag_norm, batch=batch, group=group)
+
+# Annotation
+library("illuminaHumanv4.db")
+a<-matrix(0,nrow=9595,ncol=1)
+for (i in 1:9595) {a[i,1]<-unlist(mget(x =row.names(illu_ag_norm)[i],envir = illuminaHumanv4SYMBOL))  }
+rownames(illu_ag_norm)<-a
+
+# Differential Expression
+library(limma)
+library(openxlsx)
+class<-c(rep("control", 3), rep("treat", 3))
+design<-model.matrix(~factor(class))
+colnames(design)<-c("control","treatment")
+fit<-lmFit(illu_ag_norm,design)
+fit2<-eBayes(fit)
+allDiff<-topTable(fit2,adjust='fdr',coef=2,number=200000)
+write.xlsx(allDiff,file="illu_limma_210305.xlsx",row.names=TRUE)

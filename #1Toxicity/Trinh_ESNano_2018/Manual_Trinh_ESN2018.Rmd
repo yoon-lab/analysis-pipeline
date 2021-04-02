@@ -1,0 +1,189 @@
+---
+title: "Classification of toxicity of metallic NPs"
+author: "Tung X. Trinh"
+date: "4/2/2021"
+output: html_document
+---
+Load necessary libraries:
+```{r}
+library(openxlsx) 
+library(caret) 
+library(randomForest)
+library(data.table)
+library(dplyr)
+library(svDialogs)
+library(shiny)
+library(shinythemes)
+library(shinydashboard)
+```
+
+Load dataset:
+```{r}
+DataMetal <- read.xlsx("www/MetalESN.xlsx", sheet = 1, startRow = 1, colNames = TRUE,
+                       rowNames = FALSE, detectDates = FALSE, skipEmptyRows = TRUE,
+                       skipEmptyCols = TRUE, rows = NULL, cols = NULL, check.names = FALSE,
+                       namedRegion = NULL, na.strings = "NA", fillMergedCells = FALSE)
+DataMetal <- select(DataMetal, c("Toxicity",
+                                 "Dose",
+                                 "Assay",
+                                 "Time",
+                                 "Species",
+                                 "Cancer",
+                                 "Cell_Tissue",
+                                 "Cell_line",
+                                 "SSA",
+                                 "Zeta",
+                                 "HSize",
+                                 "CoreSize",
+                                 "Coating",
+                                 "Shape",
+                                 "Metal"))
+```
+
+Split data into train and test set (70/30 )
+```{r}
+set.seed(1991)
+split_size <- floor(0.70 * nrow(DataMetal))
+in_rows <- sample(c(1:nrow(DataMetal)), size = split_size, replace = FALSE)
+train <- DataMetal[in_rows, ]
+test <- DataMetal[-in_rows, ]
+```
+
+Train Random Forest model:
+```{r}
+train.control <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
+RFmodel <- train(Toxicity ~ ., data = train, method = "rf", ntree = 100, trControl = train.control)
+print(RFmodel)
+```
+
+Use RFmodel to predict test set:
+```{r}
+predictions <- RFmodel %>% predict(test); predictions_train <- RFmodel %>% predict(train)
+
+```
+
+Get confusion matrix and performance of model:
+```{r}
+CMatrix <- confusionMatrix(predictions, as.factor(test$Toxicity))
+Performance <- data.frame(Parameter = row.names(as.data.frame(CMatrix$byClass)),
+                          Value = as.data.frame(CMatrix$byClass))
+colnames(Performance) <- c("Parameters", "Values")
+CMatrix
+Performance
+```
+
+Make an interactive app for users:
+
+```{r}
+ui <- dashboardPage(
+  dashboardHeader(title = "QSAR metal NPs", titleWidth = 350),
+  dashboardSidebar(
+    width = 350,
+    sidebarMenu(
+      menuItem("Introduction", tabName = "Introduction", icon = icon("dashboard")),
+      menuItem("Model", tabName = "Model", icon = icon("th"))
+    )
+  ),
+  dashboardBody(
+    tabItems(
+      # Model tab content
+      tabItem(tabName = "Model",
+    # Boxes need to be put in a row (or column)
+    fluidRow(
+      box(
+        height = 500,
+        title = "Input properties of NPs:",
+        selectInput("Metal", "Metal NPs:",
+                    c("Au" = "Au",
+                      "Ag" = "Ag")),
+        selectInput("Shape", "Shape:",
+                    c("Nanorod" = "Nanorod",
+                      "Sphere" = "Sphere",
+                      "Hollow" = "Hollow")),
+        sliderInput("CoreSize", "Core diameter (nm):", 1, 100, 10),
+        sliderInput("HSize", "Hydrodynamic diameter (nm):", 1, 300, 50),
+        sliderInput("Zeta", "Zeta potential (mV):", -20, 20, 0)
+
+      ),
+      box(
+        height = 500,
+        title = "Input experimental conditions:",
+        selectInput("Cell_line", "Cell line:",
+                    c("HeLa" = "HeLa",
+                      "HepG2" = "HepG2",
+                      "BEAS-2B" = "BEAS-2B",
+                      "A549" = "A549")),
+        selectInput("Assay", "Toxicity assay method:",
+                    c("MTS" = "MTS",
+                      "MTT" = "MTT",
+                      "AlamarBlue" = "Alamar Blue",
+                      "NRU" = "NRU")),
+        sliderInput("Time", "Exposure time (h):", 1, 96, 10),
+        sliderInput("Dose", "Concentration (ug/L):", 1, 10^3, 50),
+      ),
+      
+      box(
+        height = 500,
+        title = "Model performance:",
+        tableOutput("Performance")
+      ),
+      
+      
+      box(height = 120, title = "Predicted toxicity:", tableOutput("Prediction")),
+      
+      box(height = 360, title = "Summary of input:", tableOutput("SummaryInput"))
+    )
+  ),
+  # Introduction tab content
+  tabItem(tabName = "Introduction",
+          h2("A web-based app for predicting cytotoxicity of metal nanoparticles (i.e., Ag and Au)"),
+          
+          column(
+            br(),
+            p("Dataset for model development was published in:", strong("Trinh et al.  Environmental Science: Nano 5.8 (2018): 1902-1910."),style="text-align:justify;color:black;background-color:papayawhip;padding:15px;border-radius:10px"),
+            br(),
+            tags$img(src="wwww/article.png",width="860px",height="728px"),
+            width=8),
+  )
+  )
+  )
+)
+
+server <- function(input, output) {
+
+  output$Performance <- renderTable({
+    Performance
+  }, digits = 2)
+  
+  output$SummaryInput <- renderTable({
+    data.frame("Descriptor" = c("Metal NPs","Core size (nm)", "Hydrodynamic diameter (nm)", "Zeta potential (mV)","Cell line","Toxic Assay","Exposure time (h)","Concentration (ug/L)"),
+               "Values" = c(input$Metal,input$CoreSize,input$HSize, input$Zeta,input$Cell_line,input$Assay,input$Time,input$Dose))
+  }, digits = 2)
+  
+  output$Prediction <- renderTable({
+    table1 <- data.frame("Toxicity" = "UNKNOWN",
+                         "Dose" = input$Dose,
+                         "Assay" = input$Assay,
+                         "Time" = input$Time,
+                         "Species" = "Human",
+                         "Cancer" = 1,
+                         "Cell_Tissue" = "Lung",
+                         "Cell_line" = input$Cell_line,
+                         "SSA" = 20,
+                         "Zeta" = input$Zeta,
+                         "HSize" = input$HSize,
+                         "CoreSize" = input$CoreSize,
+                         "Coating" = "None",
+                         "Shape" = "Sphere",
+                         "Metal" = input$Metal)
+    
+    table2 <- as.data.frame(predict(RFmodel, table1))
+    
+    data.frame("Observed.Toxicity" = table1[1,1], "Predicted.Toxicity" = table2[1,1])
+    
+  
+  })
+}
+
+shinyApp(server = server, ui = ui)
+```

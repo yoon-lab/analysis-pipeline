@@ -3,8 +3,9 @@ title: "Classification of toxicity of metallic NPs"
 author: "Tung X. Trinh"
 date: "4/2/2021"
 output:
-html_document: default
-runtime: shiny
+  html_document:
+    df_print: paged
+  pdf_document: default
 ---
 Reference: Trinh et al. "Curation of datasets, assessment of their quality and completeness, and nanoSAR classification model development for metallic nanoparticles." Environmental Science: Nano 5.8 (2018): 1902-1910.
 
@@ -77,21 +78,22 @@ Performance
 ```
 
 Make an interactive app for users:
-
 ```{r}
 ui <- dashboardPage(
   dashboardHeader(title = "QSAR metal NPs", titleWidth = 350),
   dashboardSidebar(
     width = 350,
     sidebarMenu(
-      menuItem("Introduction", tabName = "Introduction", icon = icon("dashboard")),
-      menuItem("Model", tabName = "Model", icon = icon("th"))
+      menuItem("Model", tabName = "Model", icon = icon("th")),
+      menuItem("Introduction", tabName = "Introduction", icon = icon("dashboard"))
     )
   ),
   dashboardBody(
     tabItems(
       # Model tab content
       tabItem(tabName = "Model",
+    h2("A web-based app for predicting cytotoxicity of metal nanoparticles (i.e., Ag and Au)"),
+    h2("Reference: Trinh et al.  Environmental Science: Nano 5.8 (2018): 1902-1910."),
     # Boxes need to be put in a row (or column)
     fluidRow(
       box(
@@ -144,9 +146,11 @@ ui <- dashboardPage(
           
           column(
             br(),
-            p("Dataset for model development was published in:", strong("Trinh et al.  Environmental Science: Nano 5.8 (2018): 1902-1910."),style="text-align:justify;color:black;background-color:papayawhip;padding:15px;border-radius:10px"),
+            p("Dataset for model development was published in:", 
+              strong("Trinh et al.  Environmental Science: Nano 5.8 (2018): 1902-1910."),
+              style="text-align:justify;color:black;
+              background-color:papayawhip;padding:15px;border-radius:10px"),
             br(),
-            tags$img(src="wwww/article.png",width="860px",height="728px"),
             width=8),
   )
   )
@@ -160,8 +164,22 @@ server <- function(input, output) {
   }, digits = 2)
   
   output$SummaryInput <- renderTable({
-    data.frame("Descriptor" = c("Metal NPs","Core size (nm)", "Hydrodynamic diameter (nm)", "Zeta potential (mV)","Cell line","Toxic Assay","Exposure time (h)","Concentration (ug/L)"),
-               "Values" = c(input$Metal,input$CoreSize,input$HSize, input$Zeta,input$Cell_line,input$Assay,input$Time,input$Dose))
+    data.frame("Descriptor" = c("Metal NPs",
+                                "Core size (nm)", 
+                                "Hydrodynamic diameter (nm)", 
+                                "Zeta potential (mV)",
+                                "Cell line",
+                                "Toxic Assay",
+                                "Exposure time (h)",
+                                "Concentration (ug/L)"),
+               "Values" = c(input$Metal,
+                            input$CoreSize,
+                            input$HSize, 
+                            input$Zeta,
+                            input$Cell_line,
+                            input$Assay,
+                            input$Time,
+                            input$Dose))
   }, digits = 2)
   
   output$Prediction <- renderTable({

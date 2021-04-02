@@ -3,10 +3,11 @@ CyTOF Data Analysis
 
 ### The example data sets
 
-We use a of CyTOF data from Environmental Science:Nano Paper, My et
-al.2020. There are 7 samples of PBMC from human. Treated samples are
-coated with Ag nano pariticle in various method.We use a leukocyte
-sample which are manually gated and concatenated in FlowJo Software.  
+We use a of CyTOF data from our recent article in Environmental Science:Nano journal (Ha et
+al.2020, https://doi.org/10.1039/C9EN01104H). There are mass cytometry data for 7 human PBMC samples treated 
+with Ag nanopariticle.We use a leukocyte sample which are manually gated 
+and concatenated in FlowJo Software.  
+
 The original data is available from the link below.  
 <https://drive.google.com/drive/u/0/folders/1hD8bfT8z-9y8lGRDH0sTb_Jn12xw0S4X>
 

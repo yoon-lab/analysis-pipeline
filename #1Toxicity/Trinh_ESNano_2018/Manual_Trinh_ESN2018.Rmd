@@ -2,8 +2,12 @@
 title: "Classification of toxicity of metallic NPs"
 author: "Tung X. Trinh"
 date: "4/2/2021"
-output: html_document
+output:
+html_document: default
+runtime: shiny
 ---
+Reference: Trinh et al. "Curation of datasets, assessment of their quality and completeness, and nanoSAR classification model development for metallic nanoparticles." Environmental Science: Nano 5.8 (2018): 1902-1910.
+
 Load necessary libraries:
 ```{r}
 library(openxlsx) 

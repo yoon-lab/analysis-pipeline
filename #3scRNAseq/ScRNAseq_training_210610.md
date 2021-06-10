@@ -57,6 +57,8 @@ pbmc[["percent.mt"]] <- PercentageFeatureSet(pbmc, pattern = "^MT-")
 ``` {r 2.2.1}
 VlnPlot(pbmc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
 ```
+![image](https://user-images.githubusercontent.com/72723852/121457830-4823d880-c9e3-11eb-98d1-70a9f6cab612.png)
+
 ### Apply the filtering threshold
 ```{r 2.2.2}
 pbmc <- subset(pbmc, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 20)
@@ -105,6 +107,8 @@ pbmc_2000_k15_r1 <- FindClusters(pbmc_2000_k15, resolution = 1.0)
 pbmc_2000_k15_r1_umap <- RunUMAP(pbmc_2000_k15_r1, dims = 1:10)
 DimPlot(pbmc_2000_k15_r1_umap, reduction = "umap")
 ```
+![image](https://user-images.githubusercontent.com/72723852/121457881-5f62c600-c9e3-11eb-8f1d-96a34fcac0ed.png)
+
 ## 4.4) Decide markers for certain cell types
 ```{r  4.4}
 markers.to.plot <- c("CD3D","CD4","CTLA4","IL7R","CCR7","S100A4","CD14","LYZ","CD19","MS4A1","CD79A","CD79B","BLNK","CD8A","GZMB","CD8B","FCGR3A","MS4A7","NCAM1","KLRB1","KLRC1","KLRD1","KLRF1","GNLY","NKG7","IL3RA","CLEC4C","NRP1","FCER1A","CST3","PPBP")
@@ -113,16 +117,22 @@ markers.to.plot <- c("CD3D","CD4","CTLA4","IL7R","CCR7","S100A4","CD14","LYZ","C
 ```{r   4.5}
 DotPlot(object = pbmc_2000_k15_r1_umap, features = rev(x = markers.to.plot), cols = c("blue", "red"),dot.scale = 8) + RotatedAxis()
 ```
+![image](https://user-images.githubusercontent.com/72723852/121457911-6a1d5b00-c9e3-11eb-9ff9-a78834078ad8.png)
+
 ## 4.6) Input your assignment results
 ```{r  4.6}
 pbmc_2000_k15_r1_umap_labelled <- RenameIdents(pbmc_2000_k15_r1_umap, `0` = "Naive CD4+ T cells", `1` = "Naive CD4+ T cells", `2` = "Memory CD4+ T cells", `3` = "Monocytes", `4` = "B cells", `5` = "IL 7R-CD8+ T cells", `6` ="NK cells" , `7` ="NK cells" , `8` = "Memory CD4+ T cells", `9` = "Naive CD8+ T cells", `10` = "Naive CD8+ T cells", `11` = "Naive CD4+ T cells", `12` = "pDC or platelet")
 # 4.7) Draw the plot again
 DimPlot(pbmc_2000_k15_r1_umap_labelled, label = TRUE)
 ```
+![image](https://user-images.githubusercontent.com/72723852/121457934-71dcff80-c9e3-11eb-9959-f2c27760335a.png)
+
 ## 4.8) We can check certain cell marker expression
 ```{r  4.8}
 FeaturePlot(pbmc_2000_k15_r1_umap_labelled, features = c("CD14", "LYZ", "FCGR3A", "MS4A7", "MS4A1"))
 ```
+![image](https://user-images.githubusercontent.com/72723852/121457957-7acdd100-c9e3-11eb-8130-9a49cb99e324.png)
+
 ## 4.9) Input the cellular assignment results into the data, for later DEG analysis
 ```{r  4.9}
 pbmc_2000_k15_r1_umap_labelled@meta.data[,6]<-data.frame(pbmc_2000_k15_r1_umap_labelled@active.ident)
@@ -183,3 +193,4 @@ write.xlsx(deg_B,"DEG_B.xlsx",row.names=TRUE,colnames=TRUE)
 DoHeatmap(B_cells,features = row.names(deg_B)[1:20],group.by = "ident")
 
 ```
+![image](https://user-images.githubusercontent.com/72723852/121458071-a94bac00-c9e3-11eb-9365-e6832098d532.png)
